@@ -22,13 +22,19 @@ head(store)
 train <- train[order(train$Date)] 
 test <- test[order(test$Date)]
 
-# Train Data
-## Store
+# Train, Test Data
+## Store: 1115개, 856개
 length(unique(train$Store))
+length(unique(test$Store))
+length(intersect(unique(test$Store), unique(train$Store)))
 
 ## 누락된 날짜가 있는가
+## 942일, 48일
 max(train$Date) - min(train$Date) + 1
 length(unique(train$Date))
+max(test$Date) - min(test$Date) + 1
+length(unique(test$Date))
+
 
 ## 날짜 순 정렬이 잘 되었나
 plot(train$Date, type = 'l')
@@ -46,27 +52,84 @@ table(test$DayOfWeek)
 table(test$DayOfWeek) / nrow(test)
 
 ## Sales
-## sales 0인 애들이 꽤 있음.
+## sales 0인 데이터가 있음.
 ggplot(train) + geom_histogram(aes(x = Sales), binwidth=500)
-## sales 0빼고
+## sales 0제외 데이터
 ggplot(train[Sales != 0]) + geom_histogram(aes(x = Sales), binwidth=500)
 ## 상점별 평균 Sales
 ggplot(train[Sales != 0, .(meanSales = mean(Sales)), by = (Store)]) +
   geom_histogram(aes(x = meanSales), binwidth = 500)
 ## 요일별 sales
+## 요일 7의 세일즈가 극히 낮음. 일요일인가?
 ggplot(train[Sales != 0, .(sumSales = sum(Sales)), by = (DayOfWeek)]) +
-  geom_bar(aes(x = factor(DayOfWeek), y = sumSales))
+  geom_bar(aes(x = factor(DayOfWeek), y = sumSales), stat="identity")
+ggplot(train[Sales != 0 & Open == 1, .(sumSales = sum(Sales)), by = (DayOfWeek)]) +
+  geom_bar(aes(x = factor(DayOfWeek), y = sumSales), stat="identity")
 
-train[Sales != 0, .(sumSales = sum(Sales)), by = (DayOfWeek)]
+## Customer
+## customer 0 인 데이터 다수 있음.
+ggplot(train) + geom_histogram(aes(x = Customers), binwidth=100)
+## Customer 0 제외
+ggplot(train[Customers !=0, ]) + geom_histogram(aes(x = Customers), binwidth=100)
+## 상점별 평균 Customer
+ggplot(train[Customers != 0, .(meanCustomer = mean(Customers)), by =.(Store)]) +
+  geom_histogram(aes(x = meanCustomer), binwidth=100)
+## 요일별 Customer
+ggplot(train[Customers != 0, .(sumCustomer = sum(Customers)), by = .(DayOfWeek)]) +
+  geom_bar(aes(x = factor(DayOfWeek), y = sumCustomer), stat = 'identity')
+## Customer - Sales
+ggplot(train[Customers !=0 & Sales != 0]) + 
+  geom_point(aes(x = Customers, y = Sales))
 
-ggplot(train) + geom_bar(aes(x = factor(DayOfWeek), y = Sales, fill = DayOfWeek))
+theme_set( theme_bw( base_family = "NanumGothic" ) )
+ggplot(train[Customers != 0 & Sales != 0]) +
+  ggtitle("고객-매출") +
+  geom_point(aes(x = log(Customers), y = log(Sales))) +
+  geom_smooth(aes(x = log(Customers), y = log(Sales)))
 
-ggplot(train, aes(x=factor(1), y=sales, fill = schoolholiday)) + 
-  geom_bar(width = 1, stat="identity") + coord_polar(theta="y")
 
+## Open
+nrow(train)
+table(train$Open) / nrow(train)
+ggplot(train[, .(storeMeanSales = mean(Sales)), by = .(Open, Store)]) +
+  geom_histogram(aes(x = storeMeanSales, fill = as.factor(Open)), binwidth = 500)
+ggplot(train[, .(storeMeanCustomers = mean(Customers)), by = .(Open, Store)]) +
+  geom_histogram(aes(x = storeMeanCustomers, fill = as.factor(Open)),
+                 binwidth = 100, position = "identity", alpha = 0.7)
 
+## Promo
+table(train$Promo)/ nrow(train)
+ggplot(train[, .(storeMeanSales = mean(Sales)), by = .(Promo, Store)]) +
+  geom_histogram(aes(x = storeMeanSales, fill = as.factor(Promo)), binwidth = 500,
+                 position = "identity", alpha = 0.7)
+ggplot(train[, .(storeMeanCustomers = mean(Customers)), by = .(Promo, Store)]) +
+  geom_histogram(aes(x = storeMeanCustomers, fill = as.factor(Promo)),
+                 binwidth = 100, position = "identity", alpha = 0.7)
 
+## StateHoliday
+table(train$StateHoliday)/ nrow(train)
+ggplot(train[, .(storeMeanSales = mean(Sales)), by = .(StateHoliday, Store)]) +
+  geom_histogram(aes(x = storeMeanSales, fill = as.factor(StateHoliday)), binwidth = 1000,
+                 position = "identity", alpha = 0.7)
+ggplot(train[, .(storeMeanCustomers = mean(Customers)), by = .(StateHoliday, Store)]) +
+  geom_histogram(aes(x = storeMeanCustomers, fill = as.factor(StateHoliday)),
+                 binwidth = 100, position = "identity", alpha = 0.7)
+ggplot(train[Sales != 0]) + geom_boxplot(aes(x = as.factor(StateHoliday), y = Sales), position = "identity", alpha = 0.7)
+train[Sales != 0, .(storeMeanSales = mean(Sales)), by = .(StateHoliday)]
 
+## SchoolHoliday
+table(train$SchoolHoliday)/ nrow(train)
+ggplot(train[, .(storeMeanSales = mean(Sales)), by = .(SchoolHoliday, Store)]) +
+  geom_histogram(aes(x = storeMeanSales, fill = as.factor(SchoolHoliday)), binwidth = 500,
+                 position = "identity", alpha = 0.7)
+ggplot(train[, .(storeMeanCustomers = mean(Customers)), by = .(SchoolHoliday, Store)]) +
+  geom_histogram(aes(x = storeMeanCustomers, fill = as.factor(SchoolHoliday)),
+                 binwidth = 100, position = "identity", alpha = 0.7)
+ggplot(train[Sales != 0]) + geom_boxplot(aes(x = as.factor(SchoolHoliday), y = Sales), position = "identity", alpha = 0.7)
+train[Sales != 0, .(storeMeanSales = mean(Sales)), by = .(SchoolHoliday)]
+
+## ----
+  
 # Store
 # Store별 로그수, 매출 휴일 등은 원래 다를것임.
 length(unique(train$Store))
