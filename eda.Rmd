@@ -11,6 +11,7 @@ output: html_document
 library("data.table")
 library("ggplot2")
 library("zoo")
+library("reshape")
 
 train <- fread("data/train.csv", sep=",", header = T)
 test <- fread("data/test.csv", sep=",", header = T)
@@ -223,9 +224,51 @@ train[Open != 0, .(meanSales = mean(Sales)), by = .(paste(SchoolHoliday, as.char
 ```{r}
 train_store <- merge(train, store, by = "Store")
 train_store <- train_store[order(train_store$Date)]
+train_store[, afterCompetition := Date >= as.Date(as.yearmon(train_store$CompetitionOpenSinceYear + (train_store$CompetitionOpenSinceMonth - 1)/12))]
+train_store[, afterPromo2 := Date >= as.Date(as.yearmon(train_store$Promo2SinceYear + (train_store$Promo2SinceWeek-1) / 50))]
 ```
 
-----
+## Assortment
 
-# Store 정보와 결합.
-# Competition year/month, Promo2 year/week, PromoInterval을 join data의 각 row에 적용하도록 코딩할 것.
+assortment b에 해당하는 store의 숫자가 많지 않은대신, boxplot을 그려보면 median은 상당히 높다.
+```{r}
+ggplot(train_store[Open != 0]) + geom_boxplot(aes(x = as.factor(Assortment), y = Sales))
+ggplot(train_store[Open != 0, .(meanSales = mean(Sales)), by = .(Assortment, Store)]) +
+  geom_histogram(aes(x = meanSales, fill = as.factor(Assortment), alpha=0.7), position = "identity", binwidth=500)
+train_store[Open != 0, .(meanSales = mean(Sales)), by = .(Assortment, Store)][, .(meanSales = mean(meanSales)), by = .(Assortment)]
+table(train_store$Assortment)
+```
+
+## CompetitionDistance
+
+Distance가 멀수록 스토어의 매출이 낮아지는 분포를 보인다. 가까운 거리에 경쟁이 심하다는 것이 상권을 의미하는 것으로 보인다.
+
+```{r}
+ggplot(store) + geom_histogram(aes(x = CompetitionDistance))
+ggplot(train_store[Open != 0, .(meanSales = mean(Sales)), by = .(CompetitionDistance, Store)]) + geom_point(aes(x = CompetitionDistance, y = meanSales))
+```
+
+## CompetitionOpenSinceMonth, CompetitionOepnSinceYear
+
+Competition Open 전후의 스토어 평균 매출을 비교해보았는데, Open전에 비해 sales가 조금 감소하는 것으로 보이지만 큰 차이는 없다.
+```{r}
+train_store_competetion_sales_table = cast(train_store[Open != 0 & !is.na(afterCompetition), .(meanSales = mean(Sales)), by = .(Store, afterCompetition)], Store ~ afterCompetition)
+setnames(train_store_competetion_sales_table, c("store", "before", "after"))
+train_store_competetion_sales_table = data.table(train_store_competetion_sales_table)
+ggplot(train_store_competetion_sales_table[!is.na(before),]) + geom_histogram(aes(x = after - before))
+```
+
+## Promo2
+
+프로모션 시점 전후로 평균 500~1000 이하의 sales 증가가 확인된다.
+```{r}
+train_store_promo2_sales_table = cast(train_store[Open != 0 & !is.na(afterPromo2), .(meanSales = mean(Sales)), by = .(afterPromo2, Store)], Store ~ afterPromo2)
+setnames(train_store_promo2_sales_table, c("store", "before", "after"))
+train_store_promo2_sales_table = data.table(train_store_promo2_sales_table)
+ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_histogram(aes(x = after - before))
+ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_boxplot(aes(x = factor(1), y = after - before))
+```
+
+## PromotionInterval
+
+정확한 의미를 이해하지 못해서 분석 대상에서 일단 제외했다.

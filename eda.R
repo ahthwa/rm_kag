@@ -1,6 +1,7 @@
 library("data.table")
 library("ggplot2")
 library("zoo")
+library(reshape)
 
 #https://www.kaggle.com/thie1e/rossmann-store-sales/exploratory-analysis-rossmann/notebook 세세한 팁. 이거 보고 배울 것.
 
@@ -181,4 +182,55 @@ schoolholiday_summary
 # Store 정보와 결합.
 # Competition year/month, Promo2 year/week, PromoInterval을 join data의 각 row에 적용하도록 코딩할 것.
 
+## Join
+train_store <- merge(train, store, by = "Store")
+train_store <- train_store[order(train_store$Date)]
+summary(train_store)
 
+nrow(train_store)
+nrow(train)
+length(unique(train_store$Store))
+length(unique(train$Store))
+
+## Assortment
+## b는 store가 거의 없다. boxplot의 median은 상당히 높다.
+ggplot(train_store) + geom_boxplot(aes(x = as.factor(Assortment), y = Sales))
+ggplot(train_store[Open != 0]) + geom_boxplot(aes(x = as.factor(Assortment), y = Sales))
+ggplot(train_store[, .(meanSales = mean(Sales)), by = .(Assortment, Store)]) +
+  geom_histogram(aes(x = meanSales, fill = as.factor(Assortment), alpha=0.7), position = "identity", binwidth=500)
+ggplot(train_store[Open != 0, .(meanSales = mean(Sales)), by = .(Assortment, Store)]) +
+  geom_histogram(aes(x = meanSales, fill = as.factor(Assortment), alpha=0.7), position = "identity", binwidth=500)
+train_store[, .(meanSales = mean(Sales)), by = .(Assortment, Store)][, .(meanSales = mean(meanSales)), by = .(Assortment)]
+train_store[Open != 0, .(meanSales = mean(Sales)), by = .(Assortment, Store)][, .(meanSales = mean(meanSales)), by = .(Assortment)]
+table(train_store$Assortment)
+
+## CompetitionDistance
+## Distance가 멀수록 스토어의 매출이 낮아지는 형태임. Distance가 먼 곳에는 사람이 없기 때문인 듯.
+ggplot(store) + geom_histogram(aes(x = CompetitionDistance))
+ggplot(train_store[Open != 0, .(meanSales = mean(Sales)), by = .(CompetitionDistance, Store)]) + geom_point(aes(x = CompetitionDistance, y = meanSales))
+ggplot(train_store[Open != 0, .(meanCustomers = mean(Customers)), by = .(CompetitionDistance, Store)]) + geom_point(aes(x = CompetitionDistance, y = meanCustomers))
+
+## CompetitionOpenSinceMonth, CompetitionOepnSinceYear
+## Competition 관련 컬럼 추가
+## Competition 전후의 매출은 약간 떨어지는 경향이 있으나 큰 차이는 없음.
+ggplot(store) + geom_histogram(aes(x = CompetitionOpenSinceMonth), binwidth=1)
+ggplot(store) + geom_histogram(aes(x = CompetitionOpenSinceYear), binwidth=1)
+train_store[, afterCompetition := Date >= as.Date(as.yearmon(train_store$CompetitionOpenSinceYear + (train_store$CompetitionOpenSinceMonth - 1)/12))]
+table(train_store$afterCompetition)
+train_store_competetion_sales_table = cast(train_store[Open != 0 & !is.na(afterCompetition), .(meanSales = mean(Sales)), by = .(Store, afterCompetition)], Store ~ afterCompetition)
+setnames(train_store_competetion_sales_table, c("store", "before", "after"))
+train_store_competetion_sales_table = data.table(train_store_competetion_sales_table)
+ggplot(train_store_competetion_sales_table[!is.na(before),]) + geom_histogram(aes(x = after - before))
+
+## Promo2
+## Promo2 관련 컬럼 추가
+## 프로모션을 하지 않았다가 새로 한다면 평균적으로 500~1000 이하의 sales가 추가 확보될 수 있다.
+train_store[, afterPromo2 := Date >= as.Date(as.yearmon(train_store$Promo2SinceYear + (train_store$Promo2SinceWeek-1) / 50))]
+train_store_promo2_sales_table = cast(train_store[Open != 0 & !is.na(afterPromo2), .(meanSales = mean(Sales)), by = .(afterPromo2, Store)], Store ~ afterPromo2)
+setnames(train_store_promo2_sales_table, c("store", "before", "after"))
+train_store_promo2_sales_table = data.table(train_store_promo2_sales_table)
+ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_histogram(aes(x = after - before))
+ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_boxplot(aes(x = factor(1), y = after - before))
+
+## PromoInterval
+table(store$PromoInterval)
