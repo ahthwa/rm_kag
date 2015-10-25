@@ -232,5 +232,8 @@ train_store_promo2_sales_table = data.table(train_store_promo2_sales_table)
 ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_histogram(aes(x = after - before))
 ggplot(train_store_promo2_sales_table[!is.na(before) & !is.na(after), ]) + geom_boxplot(aes(x = factor(1), y = after - before))
 
+## 날짜에 따른 평균 매출의 변화
+ggplot(train[, .(meanSales = mean(Sales)), by = .(Date)], aes(x = Date, y = meanSales)) + geom_point() + geom_smooth()
+
 ## PromoInterval
 table(store$PromoInterval)

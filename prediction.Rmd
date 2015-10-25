@@ -1,0 +1,45 @@
+---
+title: "Prediction"
+author: "yj hong"
+date: "2015년 10월 24일"
+output: html_document
+---
+
+## Data Loading
+
+```{r}
+library("data.table")
+library("ggplot2")
+library("zoo")
+library("reshape")
+
+train <- fread("data/train.csv", sep=",", header = T)
+test <- fread("data/test.csv", sep=",", header = T)
+store <- fread("data/store.csv", sep=",", header = T)
+
+train$Date = as.Date(train$Date)
+test$Date = as.Date(test$Date)
+
+train <- train[order(train$Date)] 
+test <- test[order(test$Date)]
+train_store <- merge(train, store, by = "Store")
+train_store <- train_store[order(train_store$Date)]
+```
+
+## Model
+
+모델 컨셉: Store마다 평균값이 있고, 변수(DayOfWeek, Holiday등)에 따라 일정한 비율로 store의 매출이 변한다는 컨셉  
+변수들이 store에 주는 영향은 store마다 다르지 않다고 가정한다.
+
+이렇게 모델링 하려면, Store별 매출 편차를 표준화하고 그 변량을 변수로 러닝하면 된다.  
+샘플로 몇개 스토어의 일 매출 변화를 plot해 보았더니 다음과 같다.
+
+```{r}
+ggplot(train_store[Open != 0 & (Store == "1" | Store == "500" | Store == "300" | Store == "800"  | Store == "1000")], aes(x = Date, y = Sales, color = as.factor(Store))) +
+  geom_point() + geom_smooth()
+```
+
+그려보니 처음 생각과 달리 개별 스토어의 매출 변동폭은 작지만 변화 패턴은 일정하지 않아 표준화하는것이 좋은 방법은 아니라고 판단된다.
+
+각각 스토어별로 시간에 따른 변화 추이를 예측하는 모델을 만들어서 기준선을 잡고, 요일 휴일 등의 변수 효과가 기준선을 어떻게 변화시키는지를 찾는 방법을 쓰자.
+
